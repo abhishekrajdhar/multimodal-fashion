@@ -1,0 +1,49 @@
+project:
+  name: fashion-multimodal-retrieval
+  version: 0.1.0
+  python_version: "3.12"
+
+paths:
+  raw_data_dir: data/raw
+  processed_data_dir: data/processed
+  model_dir: models
+  output_dir: outputs
+  faiss_index_dir: outputs/faiss
+  logs_dir: outputs/logs
+
+logging:
+  level: INFO
+  format: "%(asctime)s | %(name)s | %(levelname)s | %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
+
+models:
+  image_encoder:
+    name: ""
+    checkpoint: ""
+  scene_encoder:
+    name: ""
+    checkpoint: ""
+  caption_generator:
+    name: ""
+    checkpoint: ""
+  attribute_extractor:
+    name: ""
+    checkpoint: ""
+
+indexing:
+  batch_size: 32
+  num_workers: 4
+  embedding_dim: 512
+
+retrieval:
+  top_k: 20
+  rerank_top_k: 50
+
+vector_db:
+  backend: faiss
+  index_type: IndexFlatIP
+  metric: cosine
+
+app:
+  host: 0.0.0.0
+  port: 8000
