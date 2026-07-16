@@ -4,11 +4,12 @@ project:
   python_version: "3.12"
 
 paths:
+  dataset_dir: test
   raw_data_dir: data/raw
   processed_data_dir: data/processed
   model_dir: models
   output_dir: outputs
-  faiss_index_dir: outputs/faiss
+  faiss_index_dir: outputs
   logs_dir: outputs/logs
 
 logging:
