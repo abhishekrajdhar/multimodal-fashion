@@ -29,6 +29,7 @@ fashion-multimodal-retrieval/
 │   ├── image_encoder.py
 │   └── scene_encoder.py
 ├── models/
+├── metadata.py
 ├── outputs/
 ├── retriever/
 │   ├── __init__.py
