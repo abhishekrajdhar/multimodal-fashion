@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Sequence
+
+# FAISS and PyTorch can load separate OpenMP runtimes on macOS; allow coexistence.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import faiss
 import numpy as np

@@ -13,7 +13,12 @@ from typing import Any, Callable, ClassVar, Final, Protocol, Sequence
 import torch
 from PIL import Image
 from tqdm import tqdm
-from transformers import AutoProcessor, Florence2ForConditionalGeneration
+from transformers import (
+    AutoImageProcessor,
+    BartTokenizerFast,
+    Florence2ForConditionalGeneration,
+)
+from transformers.models.florence2.processing_florence2 import Florence2Processor
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_MODEL_NAME: Final[str] = "microsoft/Florence-2-large"
@@ -175,14 +180,26 @@ class MetadataGenerator:
             self.device,
             self.dtype,
         )
+        tokenizer = BartTokenizerFast.from_pretrained(self.model_name)
+        image_processor = AutoImageProcessor.from_pretrained(self.model_name)
+        self._ensure_image_token(tokenizer=tokenizer)
+
         model = Florence2ForConditionalGeneration.from_pretrained(
             self.model_name,
             torch_dtype=self.dtype,
         )
+        if model.get_input_embeddings().weight.shape[0] < len(tokenizer):
+            model.resize_token_embeddings(len(tokenizer))
+
+        model.config.image_token_id = tokenizer.image_token_id
+        self._configure_generation_tokens(model=model, tokenizer=tokenizer)
         model.to(self.device)
         model.eval()
         model.requires_grad_(False)
-        processor = AutoProcessor.from_pretrained(self.model_name)
+        processor = Florence2Processor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+        )
 
         self.model = model
         self.processor = processor
@@ -272,6 +289,60 @@ class MetadataGenerator:
             return torch.float16
 
         return torch.float32
+
+    def _ensure_image_token(self, tokenizer: BartTokenizerFast) -> None:
+        """Ensure the Florence tokenizer exposes the expected image placeholder token."""
+        image_token = "<image>"
+        vocab = tokenizer.get_vocab()
+        if image_token not in vocab:
+            tokenizer.add_special_tokens({"additional_special_tokens": [image_token]})
+
+        tokenizer.image_token = image_token  # type: ignore[attr-defined]
+        tokenizer.image_token_id = tokenizer.convert_tokens_to_ids(image_token)  # type: ignore[attr-defined]
+
+    def _configure_generation_tokens(
+        self,
+        model: FlorenceModelProtocol,
+        tokenizer: BartTokenizerFast,
+    ) -> None:
+        """Propagate generation-critical token ids onto the model and generation config."""
+        model_config = getattr(model, "config", None)
+        generation_config = getattr(model, "generation_config", None)
+        text_config = getattr(model_config, "text_config", None)
+
+        decoder_start_token_id = (
+            getattr(generation_config, "decoder_start_token_id", None)
+            or getattr(model_config, "decoder_start_token_id", None)
+            or getattr(text_config, "decoder_start_token_id", None)
+            or tokenizer.eos_token_id
+        )
+        bos_token_id = (
+            getattr(generation_config, "bos_token_id", None)
+            or getattr(model_config, "bos_token_id", None)
+            or getattr(text_config, "bos_token_id", None)
+            or tokenizer.bos_token_id
+        )
+        eos_token_id = (
+            getattr(generation_config, "eos_token_id", None)
+            or getattr(model_config, "eos_token_id", None)
+            or getattr(text_config, "eos_token_id", None)
+            or tokenizer.eos_token_id
+        )
+        pad_token_id = (
+            getattr(generation_config, "pad_token_id", None)
+            or getattr(model_config, "pad_token_id", None)
+            or getattr(text_config, "pad_token_id", None)
+            or tokenizer.pad_token_id
+        )
+
+        for config_object in (model_config, generation_config):
+            if config_object is None:
+                continue
+
+            config_object.decoder_start_token_id = decoder_start_token_id
+            config_object.bos_token_id = bos_token_id
+            config_object.eos_token_id = eos_token_id
+            config_object.pad_token_id = pad_token_id
 
     def _validate_image_path(self, image_path: Path) -> Path:
         """Validate that the provided image path exists."""

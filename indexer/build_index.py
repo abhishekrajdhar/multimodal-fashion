@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
 import multiprocessing
+import sys
 from pathlib import Path
 from typing import Any, Final
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tqdm import tqdm
 
@@ -273,9 +278,27 @@ class IndexBuilder:
         )
 
 
-def main(config_path: Path = DEFAULT_CONFIG_PATH) -> None:
+def _build_argument_parser() -> argparse.ArgumentParser:
+    """Create the command-line parser for index building."""
+    parser = argparse.ArgumentParser(description="Build the multimodal retrieval index.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help="Path to the YAML configuration file.",
+    )
+    return parser
+
+
+def main(config_path: Path | None = None) -> None:
     """Run the index build pipeline."""
-    builder = IndexBuilder(config_path=config_path)
+    resolved_config_path = config_path
+    if resolved_config_path is None:
+        parser = _build_argument_parser()
+        args = parser.parse_args()
+        resolved_config_path = args.config
+
+    builder = IndexBuilder(config_path=resolved_config_path)
     builder.build()
 
 

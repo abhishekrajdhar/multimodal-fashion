@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

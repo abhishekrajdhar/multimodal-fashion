@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Mapping
+from typing import TYPE_CHECKING, Any, Final, Mapping
+
+# FAISS and PyTorch can load separate OpenMP runtimes on macOS; allow coexistence.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import numpy as np
 
@@ -14,7 +18,9 @@ from retriever.query_parser import QueryParser
 from retriever.text_encoder import TextEncoder
 from utils.config import load_config
 from utils.logger import setup_logging
-from vector_db.faiss_manager import FaissManager, SearchResult
+
+if TYPE_CHECKING:
+    from vector_db.faiss_manager import FaissManager, SearchResult
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_CONFIG_PATH: Final[Path] = Path("configs/config.yaml")
@@ -74,10 +80,8 @@ class SearchEngine:
         )
         self.query_parser = query_parser or QueryParser(config_path=self.config_path)
         self.text_encoder = text_encoder or self._create_text_encoder()
-        self.faiss_manager = faiss_manager or FaissManager(
-            index_dir=self.output_dir,
-            embedding_dim=int(self.indexing_config.get("embedding_dim", 1024)),
-        )
+        self.text_encoder.load_model()
+        self.faiss_manager = faiss_manager
         self._index_loaded = False
 
     def search(
@@ -148,12 +152,25 @@ class SearchEngine:
             batch_size=int(self.indexing_config.get("batch_size", 32)),
         )
 
+    def _get_faiss_manager(self) -> "FaissManager":
+        """Create the FAISS manager lazily after the text encoder is loaded."""
+        if self.faiss_manager is not None:
+            return self.faiss_manager
+
+        from vector_db.faiss_manager import FaissManager
+
+        self.faiss_manager = FaissManager(
+            index_dir=self.output_dir,
+            embedding_dim=int(self.indexing_config.get("embedding_dim", 1024)),
+        )
+        return self.faiss_manager
+
     def _ensure_index_loaded(self) -> None:
         """Load the FAISS index lazily on first use."""
         if self._index_loaded:
             return
 
-        self.faiss_manager.load()
+        self._get_faiss_manager().load()
         self._index_loaded = True
 
     def warmup(self) -> None:
@@ -227,7 +244,7 @@ class SearchEngine:
 
         return normalized_value
 
-    def _to_first_stage_candidate(self, search_result: SearchResult) -> FirstStageCandidate:
+    def _to_first_stage_candidate(self, search_result: "SearchResult") -> FirstStageCandidate:
         """Convert a FAISS search hit into the public first-stage candidate shape."""
         return FirstStageCandidate(
             image_id=search_result.image_id,

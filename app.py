@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -88,14 +92,29 @@ def build_demo(config_path: Path = DEFAULT_CONFIG_PATH) -> gr.Blocks:
     return demo
 
 
+def _build_argument_parser() -> argparse.ArgumentParser:
+    """Create the command-line parser for the Gradio app."""
+    parser = argparse.ArgumentParser(description="Launch the multimodal fashion retrieval app.")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG_PATH,
+        help="Path to the YAML configuration file.",
+    )
+    return parser
+
+
 def main() -> None:
     """Launch the Gradio application."""
-    config = load_config(config_path=DEFAULT_CONFIG_PATH)
+    parser = _build_argument_parser()
+    args = parser.parse_args()
+
+    config = load_config(config_path=args.config)
     app_config = config.get("app", {})
     host = str(app_config.get("host", "0.0.0.0"))
     port = int(app_config.get("port", 8000))
 
-    demo = build_demo(config_path=DEFAULT_CONFIG_PATH)
+    demo = build_demo(config_path=args.config)
     demo.launch(server_name=host, server_port=port)
 
 

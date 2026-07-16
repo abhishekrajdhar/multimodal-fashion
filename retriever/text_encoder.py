@@ -13,6 +13,7 @@ from indexer.image_encoder import (
     DEFAULT_MODEL_NAME,
     DEFAULT_PRETRAINED,
     EXPECTED_EMBEDDING_DIM,
+    resolve_pretrained_source,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -64,9 +65,13 @@ class TextEncoder:
             self.pretrained,
             self.device,
         )
-        model = open_clip.create_model(
+        pretrained_source = resolve_pretrained_source(
             model_name=self.model_name,
             pretrained=self.pretrained,
+        )
+        model, _, _ = open_clip.create_model_and_transforms(
+            model_name=self.model_name,
+            pretrained=pretrained_source,
             device=self.device,
         )
         tokenizer = open_clip.get_tokenizer(self.model_name)

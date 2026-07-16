@@ -6,12 +6,14 @@ import logging
 import math
 import re
 from dataclasses import dataclass
-from typing import Any, Final, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Final, Mapping, Sequence
 
 import numpy as np
 
 from metadata import FashionAttributes, ImageMetadata
-from vector_db.faiss_manager import SearchResult
+
+if TYPE_CHECKING:
+    from vector_db.faiss_manager import SearchResult
 
 LOGGER = logging.getLogger(__name__)
 TOKEN_PATTERN: Final[re.Pattern[str]] = re.compile(r"[a-z0-9]+")
@@ -56,13 +58,23 @@ class RerankedCandidate:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class CandidateRecord:
+    """Internal normalized candidate representation for reranking."""
+
+    vector_id: int
+    image_id: int
+    score: float
+    metadata: ImageMetadata
+
+
 class Reranker:
     """Refines initial retrieval results using richer signals."""
 
     def rerank(
         self,
         parsed_query: Mapping[str, Any],
-        candidates: Sequence[SearchResult | Mapping[str, Any]],
+        candidates: Sequence["SearchResult" | Mapping[str, Any]],
         top_k: int,
         query_embedding: np.ndarray | Sequence[float] | None = None,
     ) -> list[RerankedCandidate]:
@@ -138,7 +150,7 @@ class Reranker:
     def _compute_clip_similarity(
         self,
         query_embedding: np.ndarray | None,
-        candidate: SearchResult,
+        candidate: CandidateRecord,
     ) -> float:
         """Compute a normalized CLIP similarity score in [0, 1]."""
         candidate_embedding = np.asarray(candidate.metadata.clip_embedding, dtype=np.float32)
@@ -256,10 +268,25 @@ class Reranker:
         }
         return normalized_query
 
-    def _normalize_candidate(self, candidate: SearchResult | Mapping[str, Any]) -> SearchResult:
+    def _normalize_candidate(
+        self,
+        candidate: "SearchResult" | Mapping[str, Any] | CandidateRecord,
+    ) -> CandidateRecord:
         """Convert supported candidate shapes into a common SearchResult object."""
-        if isinstance(candidate, SearchResult):
+        if isinstance(candidate, CandidateRecord):
             return candidate
+
+        if not isinstance(candidate, Mapping):
+            metadata = getattr(candidate, "metadata", None)
+            if not isinstance(metadata, ImageMetadata):
+                raise ValueError("Candidate objects must expose an ImageMetadata 'metadata' attribute.")
+
+            return CandidateRecord(
+                vector_id=int(getattr(candidate, "vector_id", -1)),
+                image_id=int(getattr(candidate, "image_id")),
+                score=float(getattr(candidate, "score")),
+                metadata=metadata,
+            )
 
         metadata_payload = candidate.get("metadata")
         if metadata_payload is None:
@@ -270,7 +297,7 @@ class Reranker:
             if isinstance(metadata_payload, ImageMetadata)
             else ImageMetadata.from_dict(metadata_payload)
         )
-        return SearchResult(
+        return CandidateRecord(
             vector_id=int(candidate["vector_id"]) if candidate.get("vector_id") is not None else -1,
             image_id=int(candidate.get("image_id", metadata.image_id)),
             score=float(

@@ -15,6 +15,13 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_MODEL_NAME: Final[str] = "ViT-H-14"
 DEFAULT_PRETRAINED: Final[str] = "laion2b_s32b_b79k"
 EXPECTED_EMBEDDING_DIM: Final[int] = 1024
+_OPENCLIP_HF_CACHE_DIR: Final[Path] = (
+    Path.home()
+    / ".cache"
+    / "huggingface"
+    / "hub"
+    / "models--laion--CLIP-ViT-H-14-laion2B-s32B-b79K"
+)
 
 
 class OpenClipModel(Protocol):
@@ -63,9 +70,13 @@ class ImageEncoder:
             self.pretrained,
             self.device,
         )
-        model, _, preprocess = open_clip.create_model_and_transforms(
+        pretrained_source = resolve_pretrained_source(
             model_name=self.model_name,
             pretrained=self.pretrained,
+        )
+        model, _, preprocess = open_clip.create_model_and_transforms(
+            model_name=self.model_name,
+            pretrained=pretrained_source,
             device=self.device,
         )
         model.eval()
@@ -165,3 +176,45 @@ class ImageEncoder:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         np.save(output_path, embeddings.astype(np.float32, copy=False))
         LOGGER.info("Saved embeddings to '%s'.", output_path)
+
+
+def resolve_pretrained_source(model_name: str, pretrained: str) -> str:
+    """Prefer a locally cached OpenCLIP checkpoint when one is available."""
+    explicit_path = Path(pretrained).expanduser()
+    if explicit_path.exists():
+        return str(explicit_path.resolve())
+
+    if model_name != DEFAULT_MODEL_NAME or pretrained != DEFAULT_PRETRAINED:
+        return pretrained
+
+    snapshot_dir = _OPENCLIP_HF_CACHE_DIR / "snapshots"
+    if snapshot_dir.exists():
+        snapshot_checkpoint_paths = sorted(
+            snapshot_dir.glob("*/open_clip_model.safetensors"),
+        )
+        if snapshot_checkpoint_paths:
+            selected_snapshot_path = max(
+                snapshot_checkpoint_paths,
+                key=lambda path: path.stat().st_size,
+            )
+            LOGGER.info("Using cached OpenCLIP checkpoint from '%s'.", selected_snapshot_path)
+            return str(selected_snapshot_path)
+
+    cache_blob_dir = _OPENCLIP_HF_CACHE_DIR / "blobs"
+    if not cache_blob_dir.exists():
+        return pretrained
+
+    cached_checkpoint_paths = sorted(
+        path
+        for path in cache_blob_dir.iterdir()
+        if path.is_file() and path.suffix != ".incomplete"
+    )
+    if not cached_checkpoint_paths:
+        return pretrained
+
+    selected_checkpoint_path = max(
+        cached_checkpoint_paths,
+        key=lambda path: path.stat().st_size,
+    )
+    LOGGER.info("Using cached OpenCLIP checkpoint from '%s'.", selected_checkpoint_path)
+    return str(selected_checkpoint_path)
