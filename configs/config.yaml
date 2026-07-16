@@ -18,8 +18,8 @@ logging:
 
 models:
   image_encoder:
-    name: ""
-    checkpoint: ""
+    name: ViT-H-14
+    checkpoint: laion2b_s32b_b79k
   scene_encoder:
     name: ""
     checkpoint: ""
@@ -33,7 +33,7 @@ models:
 indexing:
   batch_size: 32
   num_workers: 4
-  embedding_dim: 512
+  embedding_dim: 1024
 
 retrieval:
   top_k: 20
