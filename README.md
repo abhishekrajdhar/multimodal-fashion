@@ -36,7 +36,8 @@ fashion-multimodal-retrieval/
 │   ├── query_parser.py
 │   ├── reranker.py
 │   ├── retrieve.py
-│   └── search.py
+│   ├── search.py
+│   └── text_encoder.py
 ├── utils/
 │   ├── __init__.py
 │   ├── config.py
