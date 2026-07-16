@@ -137,9 +137,14 @@ class ResultVisualizer:
             )
 
         if isinstance(result, RetrievedResult):
-            raise ValueError(
-                "RetrievedResult does not include image_path metadata. "
-                "Pass reranked/search results or a mapping containing full metadata instead.",
+            return VisualizationItem(
+                rank=result.rank,
+                image_id=result.image_id,
+                image_path=result.image_path,
+                similarity_score=result.score,
+                scene=self._normalize_optional_string(result.matched_scene or result.metadata.attributes.scene),
+                caption=result.caption,
+                matched_attributes=list(result.matched_attributes),
             )
 
         metadata_payload = result.get("metadata")
